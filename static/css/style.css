@@ -315,3 +315,17 @@ h1,h2,h3,h4{font-family:var(--display)}
   .owner-tools-row .owner-sidebar{display:block;padding:20px}
   .owner-tools-row .owner-sidebar>*+*{margin-top:20px}
 }
+
+/* Keep the brand anchored while every page and menu state changes. */
+.site-header{position:sticky;top:0;min-height:97px}
+.site-header .container{position:relative;min-height:68px}
+.brand{flex:0 0 68px;width:68px;height:68px}
+.nav{margin-left:auto}
+.nav-toggle{flex:0 0 36px}
+
+@media (max-width:760px){
+  .site-header{min-height:78px}
+  .site-header .container{min-height:62px}
+  .brand{flex-basis:62px;width:62px;height:62px}
+  .nav-toggle{margin-left:auto}
+}

@@ -28,6 +28,8 @@ After the first deploy, create an owner account from the Render shell:
 python manage.py createsuperuser
 ```
 
+To open the owner dashboard in production, visit `/admin/` on the deployed site and sign in with that superuser account. Then visit `/owner/`, or use `/admin/login/?next=/owner/` to sign in and continue directly to the owner dashboard. The public website does not display an owner-dashboard link.
+
 The blueprint sets `DEBUG=False`, generates a `SECRET_KEY`, and connects the app to the managed PostgreSQL database. Uploaded media files remain local to the web service filesystem; use object storage for persistent production uploads if clients will upload inspiration images.
 
 The project uses SQLite by default. Settings are loaded from environment variables with `python-dotenv`:
@@ -69,7 +71,7 @@ The project uses SQLite by default. Settings are loaded from environment variabl
 | `/reports.csv` | `report_csv` | Download the selected owner report as CSV |
 | `/admin/` | Django admin | Manage all registered models |
 
-Sign-in is currently disabled. Owners use an already authenticated Django account, normally created with `createsuperuser` or through the admin. Protected pages redirect visitors to the public website until sign-in is enabled again.
+Worker sign-in is disabled. Owners use the private `/owner/login/` page with an owner account, normally created with `createsuperuser` or through the admin. The public website does not display an owner login link.
 
 ## Functions and Classes
 
