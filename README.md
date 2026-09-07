@@ -20,6 +20,8 @@ Open `http://127.0.0.1:8000/` after starting the development server.
 
 This repository includes `render.yaml` for a Render web service and PostgreSQL database. In Render, choose **New > Blueprint**, connect this repository, and apply the blueprint. Render will install dependencies, collect static files, run migrations, and start Gunicorn automatically.
 
+If the service was created manually, set its **Start Command** to `gunicorn plightful.wsgi:application --bind 0.0.0.0:$PORT`. Do not use `gunicorn app:app`; that is not a Django module in this project.
+
 After the first deploy, create an owner account from the Render shell:
 
 ```bash
