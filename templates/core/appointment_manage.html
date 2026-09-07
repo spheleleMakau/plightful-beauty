@@ -1,0 +1,16 @@
+{% extends 'core/base.html' %}
+{% block title %}Appointment Details | Plightful Beauty{% endblock %}
+{% block content %}
+<section class="page-section">
+  <div class="container appointment-layout">
+    <div class="appointment-details">
+      <p class="eyebrow">CLIENT APPOINTMENT</p>
+      <h1>{{ appointment.client.full_name }}</h1>
+      <div class="appointment-meta"><span>{{ appointment.appointment_date }}</span><span>{{ appointment.appointment_time }}</span><span>{{ appointment.service.name }}</span></div>
+      <div class="client-detail-list"><div><span>Phone</span><strong>{{ appointment.client.phone }}</strong></div><div><span>Email</span><strong>{{ appointment.client.email|default:'Not provided' }}</strong></div><div><span>Requested notes</span><strong>{{ appointment.notes|default:'No notes added.' }}</strong></div><div><span>Current worker</span><strong>{{ appointment.worker|default:'Not assigned yet' }}</strong></div></div>
+      {% if appointment.inspiration_image_1 or appointment.inspiration_image_2 %}<div class="inspiration-preview"><p class="eyebrow">INSPIRATION</p>{% if appointment.inspiration_image_1 %}<a href="{{ appointment.inspiration_image_1.url }}" target="_blank" rel="noreferrer"><img src="{{ appointment.inspiration_image_1.url }}" alt="First client inspiration image"></a>{% endif %}{% if appointment.inspiration_image_2 %}<a href="{{ appointment.inspiration_image_2.url }}" target="_blank" rel="noreferrer"><img src="{{ appointment.inspiration_image_2.url }}" alt="Second client inspiration image"></a>{% endif %}</div>{% endif %}
+    </div>
+    <div class="form-shell assignment-shell"><p class="eyebrow">TEAM ASSIGNMENT</p><h2>Assign this appointment</h2><p class="form-intro">{% if is_owner %}Choose from all salon workers.{% else %}Only active workers who are free for this service duration are shown.{% endif %}</p><form method="post">{% csrf_token %}{{ form.as_p }}<button class="btn-primary" type="submit">Save assignment</button></form>{% if is_owner %}<a class="btn-primary" href="{% url 'owner_dashboard' %}">Return to owner dashboard <span aria-hidden="true">&larr;</span></a>{% endif %}<form class="delete-appointment-form" method="post" action="{% url 'appointment_delete' appointment.pk %}">{% csrf_token %}<button class="danger-link" type="submit">Delete appointment</button></form></div>
+  </div>
+</section>
+{% endblock %}

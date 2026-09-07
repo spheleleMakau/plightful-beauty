@@ -1,0 +1,73 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+<section class="owner-dashboard">
+  <div class="owner-shell">
+    <div class="owner-header">
+      <div>
+        <p class="eyebrow">PRIVATE OWNER SPACE</p>
+        <h1>Good morning, Tsontso.</h1>
+        <p class="owner-subtitle">Your salon at a glance, with every important detail close at hand.</p>
+      </div>
+      <div class="owner-header-actions">
+        <span class="date-stamp">{{ start }} &mdash; {{ end }}</span>
+        <a class="btn-primary" href="{% url 'walk_in_create' %}">+ Record walk-in</a>
+      </div>
+    </div>
+
+    <nav class="dashboard-toolbar" aria-label="Dashboard filters">
+      <div class="period-tabs">
+        <a href="{% url 'owner_dashboard' %}?period=today">Today</a>
+        <a href="{% url 'owner_dashboard' %}?period=week">This week</a>
+        <a href="{% url 'owner_dashboard' %}?period=month">This month</a>
+      </div>
+      <form class="date-filter" method="get">
+        <label>From <input type="date" name="start" value="{{ start|date:'Y-m-d' }}"></label>
+        <label>To <input type="date" name="end" value="{{ end|date:'Y-m-d' }}"></label>
+        <button type="submit">Apply dates</button>
+      </form>
+    </nav>
+
+    <div class="owner-kpis">
+      <article class="owner-kpi kpi-featured"><span>Revenue</span><strong>R {{ summary.revenue }}</strong><small>For selected period</small></article>
+      <article class="owner-kpi"><span>Appointments</span><strong>{{ summary.appointments }}</strong><small>{{ summary.completed_appointments }} completed</small></article>
+      <article class="owner-kpi"><span>Walk-ins</span><strong>{{ summary.walk_ins }}</strong><small>Recorded visits</small></article>
+      <article class="owner-kpi"><span>Pending</span><strong>{{ summary.pending }}</strong><small>Need your attention</small></article>
+      <article class="owner-kpi"><span>Cancelled</span><strong>{{ summary.cancelled }}</strong><small>Selected period</small></article>
+      <article class="owner-kpi"><span>Loyal clients</span><strong>{{ summary.loyal_clients }}</strong><small>Three or more visits</small></article>
+      <article class="owner-kpi"><span>Average ticket</span><strong>R {{ summary.average_ticket }}</strong><small>Per served client</small></article>
+      <article class="owner-kpi"><span>Client rating</span><strong>{{ summary.satisfaction }}{% if summary.satisfaction != '—' %}<small class="rating-mark"> / 5</small>{% endif %}</strong><small>Walk-in feedback</small></article>
+    </div>
+
+    <div class="owner-insights">
+      <article class="next-appointment">
+        <div class="insight-label"><span class="live-dot"></span> NEXT APPOINTMENT</div>
+        {% if next_appointment %}<strong>{{ next_appointment.client.full_name }}</strong><span>{{ next_appointment.service.name }} &middot; {{ next_appointment.appointment_date }} at {{ next_appointment.appointment_time }}</span><small>{% if next_appointment.worker %}With {{ next_appointment.worker }}{% else %}Awaiting team assignment{% endif %}</small>{% else %}<strong>Your day is clear.</strong><span>No upcoming appointments have been booked.</span><small>Keep your calendar open for new requests.</small>{% endif %}
+      </article>
+      <article class="service-insight"><div class="insight-label">MOST REQUESTED</div><h2>Popular services</h2>{% for service in summary.popular_services %}<div class="service-row"><span>{{ service.service__name }}</span><b>{{ service.total }}</b></div>{% endfor %}</article>
+    </div>
+
+    <section class="performance-panel upcoming-owner-panel"><div class="workspace-heading"><div><p class="eyebrow">CALENDAR AHEAD</p><h2>Upcoming appointments</h2></div><a class="text-link" href="{% url 'owner_appointments' %}">Manage all <span aria-hidden="true">↗</span></a></div><div class="table-wrap"><table><thead><tr><th>Date</th><th>Time</th><th>Client</th><th>Service</th><th>Assigned worker</th><th>Status</th><th></th></tr></thead><tbody>{% for appointment in upcoming_appointments %}<tr><td>{{ appointment.appointment_date }}</td><td>{{ appointment.appointment_time }}</td><td><strong>{{ appointment.client.full_name }}</strong><small>{{ appointment.client.phone }}</small></td><td>{{ appointment.service.name }}</td><td>{{ appointment.worker|default:'Unassigned' }}</td><td><span class="status status-{{ appointment.status }}">{{ appointment.get_status_display }}</span></td><td><a href="{% url 'appointment_manage' appointment.pk %}">Update</a></td></tr>{% endfor %}</tbody></table></div></section>
+
+    <div class="performance-panel">
+      <div class="workspace-heading"><div><p class="eyebrow">TEAM ANALYSIS</p><h2>Worker performance</h2></div><a class="btn-primary" href="{% url 'worker_create' %}">+ Hire worker</a></div>
+      <div class="performance-grid">{% for worker in worker_performance %}<a class="performance-row" href="{% url 'worker_detail' worker.pk %}"><div class="worker-avatar">{{ worker.user.first_name|first }}{{ worker.user.last_name|first }}</div><div><strong>{{ worker.user.get_full_name|default:worker.user.username }}</strong><small>{{ worker.position }}</small></div><span><b>{{ worker.assigned_services|add:worker.walk_in_count }}</b> assigned</span><span><b>{{ worker.completed_services }}</b> completed</span><span><b>R {{ worker.total_revenue|default:'0.00' }}</b> generated</span><span class="view-work">View details &rarr;</span></a>{% endfor %}</div>
+    </div>
+
+    <div class="owner-workspace owner-tools-row">
+      <aside class="owner-sidebar">
+        <div class="workspace-heading"><div><p class="eyebrow">SALON TOOLS</p><h2>Quick access</h2></div></div>
+        <div class="quick-actions">
+          <a href="{% url 'owner_clients' %}"><span class="action-icon">CL</span><span><strong>Client database</strong><small>Profiles and history</small></span><b>&rarr;</b></a>
+          <a href="{% url 'owner_workers' %}"><span class="action-icon">TM</span><span><strong>Your team</strong><small>Workers and assignments</small></span><b>&rarr;</b></a>
+          <a href="{% url 'service_create' %}"><span class="action-icon">SV</span><span><strong>Services</strong><small>Manage your menu</small></span><b>&rarr;</b></a>
+          <a href="{% url 'report_csv' %}?start={{ start|date:'Y-m-d' }}&end={{ end|date:'Y-m-d' }}"><span class="action-icon">RP</span><span><strong>Download report</strong><small>PDF for this period</small></span><b>&rarr;</b></a>
+        </div>
+        <div class="walkin-live"><div class="insight-label">WORKERS IN SALON TODAY</div>{% for worker in workers_in_salon %}<div class="walkin-row"><span><strong>{{ worker }}</strong><small>Assigned to current walk-in clients</small></span><b>On floor</b></div>{% endfor %}</div>
+        <div class="walkin-live"><div class="insight-label">CLIENTS INSIDE TODAY</div>{% for appointment in checked_in_appointments %}<div class="walkin-row"><span><strong>{{ appointment.client.full_name }}</strong><small>{{ appointment.service.name }} &middot; {% if appointment.worker %}Assigned to {{ appointment.worker }}{% else %}Worker not assigned{% endif %}</small></span><b>{{ appointment.get_status_display }}</b></div>{% endfor %}{% for walk_in in current_walk_ins %}<div class="walkin-row"><span><strong>{{ walk_in.client.full_name }}</strong><small>{{ walk_in.service.name }} &middot; {% if walk_in.worker %}Assigned to {{ walk_in.worker }}{% else %}Worker not assigned{% endif %}</small></span><b>{{ walk_in.time_spent_display }}</b></div>{% endfor %}</div>
+        <div class="owner-note"><span class="note-mark">PB</span><p>Beautiful work is in the details.</p><small>Plightful Beauty Salon</small></div>
+      </aside>
+    </div>
+  </div>
+</section>
+{% endblock %}

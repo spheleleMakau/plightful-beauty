@@ -1,0 +1,8 @@
+Django>=4.2
+psycopg2-binary>=2.9
+gunicorn
+whitenoise
+python-dotenv
+pandas
+Pillow
+reportlab

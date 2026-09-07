@@ -1,0 +1,21 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<section class="dashboard-section">
+  <div class="container">
+    <div class="section-heading">
+      <div><p class="eyebrow">OWNER CONSOLE</p><h1>Your team</h1><p>Hire the right people, keep access secure, and understand who is driving the salon forward.</p></div>
+      <a class="btn-primary" href="{% url 'worker_create' %}">+ Hire a worker</a>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Worker</th><th>Position</th><th>Contact</th><th>Joined</th><th>Appointments</th><th>Status</th><th>Access</th></tr></thead>
+        <tbody>
+          {% for worker in workers %}
+          <tr><td><strong>{{ worker.user.get_full_name|default:worker.user.username }}</strong><small>{{ worker.user.username }}</small></td><td>{{ worker.position }}</td><td>{{ worker.phone }}<br>{{ worker.user.email }}</td><td>{{ worker.joined_date }}</td><td>{{ worker.appointment_total }}</td><td>{% if worker.is_active %}<span class="status status-confirmed">Active</span>{% else %}<span class="status status-cancelled">Inactive</span>{% endif %}</td><td><form method="post" action="{% url 'worker_toggle' worker.pk %}">{% csrf_token %}<button class="table-action" type="submit">{% if worker.is_active %}Deactivate{% else %}Activate{% endif %}</button></form></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,18 @@
+{% extends 'core/base.html' %}
+{% block content %}<section class="page-section"><div class="form-shell"><p class="eyebrow">YOUR VISIT</p><h1>Book an appointment</h1><p class="form-intro">Choose a service and date. We will check the team calendar and suggest the next available times.</p><form method="post" enctype="multipart/form-data">{% csrf_token %}{{ form.as_p }}<div class="booking-availability" aria-live="polite"><strong>Live availability</strong><span id="booked-times">Choose a service and date to see availability.</span><div id="available-slots" class="available-slots"></div></div><button class="btn-primary" type="submit">Request appointment</button></form></div></section><script>
+const dateField = document.getElementById('id_appointment_date');
+const serviceField = document.getElementById('id_service');
+const bookedTimes = document.getElementById('booked-times');
+const availableSlots = document.getElementById('available-slots');
+async function showBookedTimes() {
+	if (!dateField.value || !serviceField.value) { bookedTimes.textContent = 'Choose a service and date to see availability.'; availableSlots.innerHTML = ''; return; }
+	const response = await fetch('{% url "booked_times" %}?date=' + encodeURIComponent(dateField.value) + '&service=' + encodeURIComponent(serviceField.value));
+	const data = await response.json();
+	bookedTimes.textContent = data.booked_times.length ? `Booked times: ${data.booked_times.join(', ')}` : 'No bookings yet for this date.';
+	availableSlots.innerHTML = data.available_slots.length ? `<span>Recommended times:</span> ${data.available_slots.map(slot => `<button type="button" data-time="${slot.time}">${slot.time}</button>`).join(' ')}` : 'No workers are free for this service on that date.';
+	availableSlots.querySelectorAll('button').forEach(button => button.addEventListener('click', () => { document.getElementById('id_appointment_time').value = button.dataset.time; }));
+}
+dateField.addEventListener('change', showBookedTimes);
+serviceField.addEventListener('change', showBookedTimes);
+showBookedTimes();
+</script>{% endblock %}

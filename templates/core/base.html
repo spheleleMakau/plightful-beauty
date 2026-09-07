@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    {% load static %}
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Plightful Beauty Salon offers considered hair artistry, nail care, and personal beauty appointments.">
+    <title>{% block title %}Plightful Beauty Salon{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet">
+    <link href="{% static 'css/style.css' %}" rel="stylesheet">
+  </head>
+  <body class="{% if request.resolver_match.url_name == 'owner_dashboard' or 'owner_' in request.resolver_match.url_name %}owner-area{% else %}public-area{% endif %}">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <header class="site-header">
+      <div class="container">
+        <a href="{% url 'home' %}" class="brand" aria-label="Plightful Beauty home">
+          <img src="{% static 'img/logo.jpg' %}" alt="Plightful Beauty logo">
+        </a>
+        <button class="nav-toggle" type="button" aria-label="Open navigation" aria-controls="site-navigation" aria-expanded="false"><span></span><span></span><span></span></button>
+        <nav class="nav" id="site-navigation" aria-label="Main navigation">
+          <div class="nav-main">
+            <a class="{% if request.resolver_match.url_name == 'home' %}is-active{% endif %}" href="{% url 'home' %}">Home</a>
+            <a class="{% if request.resolver_match.url_name == 'about' %}is-active{% endif %}" href="{% url 'about' %}">About</a>
+            <a class="{% if request.resolver_match.url_name == 'services' %}is-active{% endif %}" href="{% url 'services' %}">Services</a>
+            <a class="nav-book {% if request.resolver_match.url_name == 'book' %}is-active{% endif %}" href="{% url 'book' %}">Book a visit <span aria-hidden="true">↗</span></a>
+          </div>
+          {% if request.resolver_match.url_name == 'owner_dashboard' or 'owner_' in request.resolver_match.url_name %}
+          <div class="nav-account">
+          {% if user.is_authenticated %}
+            {% if user.profile.role == 'owner' %}
+              {% if request.resolver_match.url_name == 'owner_dashboard' or 'owner_' in request.resolver_match.url_name %}<a class="nav-portal" href="{% url 'home' %}">View website</a><a class="nav-portal" href="{% url 'owner_dashboard' %}">Owner Dashboard</a>{% endif %}
+            {% elif user.profile.role == 'worker' %}<a class="nav-portal" href="{% url 'dashboard' %}">Worker Dashboard</a>{% else %}<a class="nav-portal" href="{% url 'dashboard' %}">My Dashboard</a>{% endif %}
+            <form class="logout-form" method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">Sign out</button></form>
+          {% endif %}
+          </div>
+          {% endif %}
+        </nav>
+      </div>
+    </header>
+    <main id="main-content">
+      {% block content %}{% endblock %}
+    </main>
+    <footer class="site-footer">
+      <div class="container footer-inner"><div><strong>Plightful Beauty</strong><span>Thoughtful beauty, beautifully personal.</span></div><a href="{% url 'book' %}">Book your visit <span aria-hidden="true">↗</span></a><small>© {% now "Y" %} Plightful Beauty Salon</small></div>
+    </footer>
+    <script>
+      const navToggle = document.querySelector('.nav-toggle');
+      const navigation = document.querySelector('#site-navigation');
+      navToggle.addEventListener('click', () => {
+        const isOpen = navigation.classList.toggle('is-open');
+          navToggle.setAttribute('aria-expanded', isOpen);
+          navToggle.setAttribute('aria-label', isOpen ? 'Close navigation' : 'Open navigation');
+      });
+        navigation.querySelectorAll('a').forEach((link) => link.addEventListener('click', () => {
+          navigation.classList.remove('is-open');
+          navToggle.setAttribute('aria-expanded', 'false');
+          navToggle.setAttribute('aria-label', 'Open navigation');
+        }));
+    </script>
+  </body>
+</html>

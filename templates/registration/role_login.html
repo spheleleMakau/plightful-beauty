@@ -1,0 +1,2 @@
+{% extends 'core/base.html' %}
+{% block content %}<section class="page-section"><div class="form-shell login-shell"><p class="eyebrow">{{ role_name|upper }} ACCESS</p><h1>{{ role_name }} sign in.</h1><p class="form-intro">{{ role_description }}</p><form method="post">{% csrf_token %}{{ form.as_p }}<input type="hidden" name="next" value="{{ next }}"><button class="btn-primary" type="submit">Sign in as {{ role_name|lower }}</button></form></div></section>{% endblock %}
