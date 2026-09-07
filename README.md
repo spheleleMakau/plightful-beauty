@@ -50,7 +50,6 @@ The project uses SQLite by default. Settings are loaded from environment variabl
 | `/contact/` | `contact` | Contact page |
 | `/book/` | `book` | Create an appointment request |
 | `/booked-times/` | `booked_times` | JSON list of booked times for a date |
-| `/worker/login/` | `WorkerLoginView` | Active worker login |
 | `/dashboard/` | `dashboard` | Customer, worker, or owner dashboard |
 | `/owner/` | `owner_dashboard` | Owner analytics dashboard |
 | `/owner/preview/` | `owner_preview` | Debug-only empty dashboard preview |
@@ -70,7 +69,7 @@ The project uses SQLite by default. Settings are loaded from environment variabl
 | `/reports.csv` | `report_csv` | Download the selected owner report as CSV |
 | `/admin/` | Django admin | Manage all registered models |
 
-There is intentionally no owner login URL. Owners use a Django-authenticated account, normally created with `createsuperuser` or through the admin. The worker login form is restricted to active worker profiles.
+Sign-in is currently disabled. Owners use an already authenticated Django account, normally created with `createsuperuser` or through the admin. Protected pages redirect visitors to the public website until sign-in is enabled again.
 
 ## Functions and Classes
 
