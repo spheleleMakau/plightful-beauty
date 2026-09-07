@@ -71,7 +71,7 @@ The project uses SQLite by default. Settings are loaded from environment variabl
 | `/reports.csv` | `report_csv` | Download the selected owner report as CSV |
 | `/admin/` | Django admin | Manage all registered models |
 
-Worker sign-in is disabled. Owners use the private `/owner/login/` page with an owner account, normally created with `createsuperuser` or through the admin. The public website does not display an owner login link.
+Sign-in is currently disabled. Owners must use an already authenticated Django admin session, then visit `/owner/`. Protected pages redirect unauthenticated visitors to the public website.
 
 ## Functions and Classes
 

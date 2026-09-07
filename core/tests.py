@@ -41,7 +41,7 @@ class SalonWorkflowTests(TestCase):
     def test_dashboard_requires_login(self):
         response = self.client.get('/dashboard/')
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.url.startswith('/owner/login/?next=/dashboard/'))
+        self.assertTrue(response.url.startswith('/?next=/dashboard/'))
 
     def test_booking_accepts_two_inspiration_images(self):
         future = date.today() + timedelta(days=3)
@@ -63,13 +63,13 @@ class SalonWorkflowTests(TestCase):
         self.assertEqual(summary['revenue'], Decimal('350'))
         self.assertEqual(summary['clients_served'], 1)
 
-    def test_owner_login_is_available_and_worker_login_is_removed(self):
+    def test_sign_in_routes_are_removed(self):
         owner = User.objects.create_user('owner_login', password='pass-123', is_staff=True)
         Profile.objects.update_or_create(user=owner, defaults={'role': Profile.OWNER})
         worker = User.objects.create_user('worker_login', password='pass-123')
         Profile.objects.update_or_create(user=worker, defaults={'role': Profile.WORKER})
         Worker.objects.create(user=worker)
-        self.assertEqual(self.client.get('/owner/login/').status_code, 200)
+        self.assertEqual(self.client.get('/owner/login/').status_code, 404)
         self.assertEqual(self.client.get('/worker/login/').status_code, 404)
         self.assertEqual(self.client.get('/accounts/login/').status_code, 404)
 

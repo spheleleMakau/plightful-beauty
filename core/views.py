@@ -4,7 +4,6 @@ from decimal import Decimal
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.views import LoginView
 from django.core.exceptions import PermissionDenied
 from django.core.mail import send_mail
 from django.db.models import Count, Q, Sum
@@ -19,7 +18,7 @@ from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from .analytics import business_summary
 from .availability import available_workers, recommended_slots
-from .forms import AppointmentManageForm, BookingForm, ClientManageForm, OwnerLoginForm, ServiceManageForm, WalkInForm, WorkerCreateForm, WorkerLoginForm
+from .forms import AppointmentManageForm, BookingForm, ClientManageForm, ServiceManageForm, WalkInForm, WorkerCreateForm
 from .models import Appointment, Client, Profile, Service, WalkIn, Worker
 
 
@@ -81,23 +80,6 @@ def services(request): return render(request, 'core/services.html', {'services':
 def gallery(request): return render(request, 'core/gallery.html')
 def contact(request): return render(request, 'core/contact.html')
 
-
-class OwnerLoginView(LoginView):
-    template_name = 'registration/role_login.html'
-    authentication_form = OwnerLoginForm
-    extra_context = {'role_name': 'Owner', 'role_description': 'Sign in to manage appointments, clients, services, workers, and salon reports.', 'role_home': 'owner_dashboard'}
-
-    def get_success_url(self):
-        return self.get_redirect_url() or '/owner/'
-
-
-class WorkerLoginView(LoginView):
-    template_name = 'registration/role_login.html'
-    authentication_form = WorkerLoginForm
-    extra_context = {'role_name': 'Worker', 'role_description': 'Sign in to view your appointments and record client visits.', 'role_home': 'dashboard'}
-
-    def get_success_url(self):
-        return self.get_redirect_url() or '/dashboard/'
 
 def book(request):
     remembered = request.session.get('booking_customer', {})
