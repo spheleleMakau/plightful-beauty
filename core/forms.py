@@ -4,6 +4,7 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
+from django.utils import timezone
 from .models import Appointment, Client, Profile, Service, WalkIn, Worker
 from .availability import available_workers, worker_is_available
 
@@ -41,15 +42,17 @@ class BookingForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['service'].queryset = Service.objects.filter(is_active=True)
-        self.fields['appointment_date'].widget.attrs['min'] = date.today().isoformat()
+        self.fields['appointment_date'].widget.attrs['min'] = timezone.localdate().isoformat()
 
     def clean(self):
         cleaned = super().clean()
         appointment_date = cleaned.get('appointment_date')
         appointment_time = cleaned.get('appointment_time')
-        if appointment_date and appointment_date < date.today():
+        today = timezone.localdate()
+        current_time = timezone.localtime().time()
+        if appointment_date and appointment_date < today:
             self.add_error('appointment_date', 'Please choose today or a future date.')
-        if appointment_date == date.today() and appointment_time and appointment_time <= datetime.now().time():
+        if appointment_date == today and appointment_time and appointment_time <= current_time:
             self.add_error('appointment_time', 'Please choose a later time today.')
         if appointment_date and appointment_time:
             service = cleaned.get('service')
@@ -58,6 +61,7 @@ class BookingForm(forms.ModelForm):
                 appointment_date=appointment_date,
                 appointment_time=appointment_time,
                 worker__isnull=True,
+                paid_at__isnull=False,
             ).exclude(status=Appointment.CANCELLED).exists():
                 raise forms.ValidationError('That time is no longer available. Please choose another.')
             if Worker.objects.filter(is_active=True).exists() and not available_workers(appointment_date, appointment_time, duration):
@@ -87,6 +91,24 @@ class WalkInForm(forms.ModelForm):
         model = WalkIn
         fields = ['client_name', 'phone', 'service', 'worker', 'style', 'style_details', 'amount', 'satisfaction', 'notes']
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        service_id = self.data.get('service') or self.initial.get('service')
+        service = Service.objects.filter(pk=service_id, is_active=True).first() if service_id else None
+        if service:
+            workers = available_workers(timezone.localdate(), timezone.localtime().time(), service.duration_minutes)
+            worker_ids = [worker.pk for worker in workers]
+            self.fields['worker'].queryset = Worker.objects.filter(pk__in=worker_ids).select_related('user').order_by('user__first_name', 'user__last_name')
+        else:
+            self.fields['worker'].queryset = Worker.objects.filter(is_active=True).select_related('user').order_by('user__first_name', 'user__last_name')
+
+    def clean_worker(self):
+        worker = self.cleaned_data.get('worker')
+        service = self.cleaned_data.get('service')
+        if worker and service and not worker_is_available(worker, timezone.localdate(), timezone.localtime().time(), service.duration_minutes):
+            raise forms.ValidationError('Choose a worker who is currently available.')
+        return worker
+
     def save(self, commit=True):
         client, _ = Client.objects.get_or_create(
             phone=self.cleaned_data['phone'],
@@ -101,6 +123,26 @@ class WalkInForm(forms.ModelForm):
         return walk_in
 
 
+class WalkInManageForm(forms.ModelForm):
+    class Meta:
+        model = WalkIn
+        fields = ['worker', 'style', 'style_details', 'amount', 'satisfaction', 'notes']
+        widgets = {'style_details': forms.Textarea(attrs={'rows': 3}), 'notes': forms.Textarea(attrs={'rows': 3})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        start_time = timezone.localtime(self.instance.start_time)
+        workers = available_workers(start_time.date(), start_time.time(), self.instance.service.duration_minutes, exclude_walk_in_id=self.instance.pk)
+        self.fields['worker'].queryset = Worker.objects.filter(pk__in=[worker.pk for worker in workers]).select_related('user').order_by('user__first_name', 'user__last_name')
+
+    def clean_worker(self):
+        worker = self.cleaned_data.get('worker')
+        start_time = timezone.localtime(self.instance.start_time)
+        if worker and not worker_is_available(worker, start_time.date(), start_time.time(), self.instance.service.duration_minutes, exclude_walk_in_id=self.instance.pk):
+            raise forms.ValidationError('Choose a worker who is currently available.')
+        return worker
+
+
 class AppointmentManageForm(forms.ModelForm):
     class Meta:
         model = Appointment
@@ -111,9 +153,7 @@ class AppointmentManageForm(forms.ModelForm):
         self.is_owner = kwargs.pop('is_owner', False)
         super().__init__(*args, **kwargs)
         appointment = self.instance
-        if self.is_owner:
-            self.fields['worker'].queryset = Worker.objects.select_related('user').order_by('user__first_name', 'user__last_name')
-        elif appointment.pk and appointment.service_id and appointment.appointment_date and appointment.appointment_time:
+        if appointment.pk and appointment.service_id and appointment.appointment_date and appointment.appointment_time:
             self.fields['worker'].queryset = Worker.objects.filter(
                 pk__in=[worker.pk for worker in available_workers(
                     appointment.appointment_date,
@@ -128,7 +168,7 @@ class AppointmentManageForm(forms.ModelForm):
     def clean_worker(self):
         worker = self.cleaned_data.get('worker')
         appointment = self.instance
-        if not self.is_owner and worker and appointment.service_id and not worker_is_available(
+        if worker and appointment.service_id and not worker_is_available(
             worker,
             appointment.appointment_date,
             appointment.appointment_time,

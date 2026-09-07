@@ -32,6 +32,17 @@ To open the owner dashboard in production, visit `/admin/` on the deployed site 
 
 The blueprint sets `DEBUG=False`, generates a `SECRET_KEY`, and connects the app to the managed PostgreSQL database. Uploaded media files remain local to the web service filesystem; use object storage for persistent production uploads if clients will upload inspiration images.
 
+### WhatsApp confirmations
+
+After payment, the app attempts to send the booking confirmation through WhatsApp Cloud API. Add these Render environment variables to enable automatic delivery:
+
+```text
+WHATSAPP_ACCESS_TOKEN=your-meta-access-token
+WHATSAPP_PHONE_NUMBER_ID=your-whatsapp-phone-number-id
+```
+
+If these variables are not configured, or WhatsApp cannot deliver to the supplied number, the booking is still secured and the client receives an on-screen confirmation plus a prefilled WhatsApp fallback link.
+
 The project uses SQLite by default. Settings are loaded from environment variables with `python-dotenv`:
 
 | Variable | Default | Purpose |
@@ -71,7 +82,7 @@ The project uses SQLite by default. Settings are loaded from environment variabl
 | `/reports.csv` | `report_csv` | Download the selected owner report as CSV |
 | `/admin/` | Django admin | Manage all registered models |
 
-Sign-in is currently disabled. Owners must use an already authenticated Django admin session, then visit `/owner/`. Protected pages redirect unauthenticated visitors to the public website.
+Owner access is currently open for client testing. The public website is `/`, and the owner dashboard is `/owner/`. No authentication is required while this testing mode is enabled.
 
 ## Functions and Classes
 

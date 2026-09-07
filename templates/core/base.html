@@ -25,6 +25,7 @@
             <a class="{% if request.resolver_match.url_name == 'about' %}is-active{% endif %}" href="{% url 'about' %}">About</a>
             <a class="{% if request.resolver_match.url_name == 'services' %}is-active{% endif %}" href="{% url 'services' %}">Services</a>
             <a class="nav-book {% if request.resolver_match.url_name == 'book' %}is-active{% endif %}" href="{% url 'book' %}">Book a visit <span aria-hidden="true">↗</span></a>
+            <a class="nav-portal" href="{% url 'owner_dashboard' %}">Owner dashboard</a>
           </div>
           {% if request.resolver_match.url_name == 'owner_dashboard' or 'owner_' in request.resolver_match.url_name %}
           <div class="nav-account">

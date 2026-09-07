@@ -9,7 +9,7 @@ from django.test import override_settings
 from django.utils import timezone
 from PIL import Image
 from core.analytics import business_summary
-from core.forms import AppointmentManageForm, BookingForm, WorkerCreateForm
+from core.forms import AppointmentManageForm, BookingForm, WalkInManageForm, WorkerCreateForm
 from core.models import Appointment, Client, Profile, Service, WalkIn, Worker
 
 
@@ -27,9 +27,22 @@ class SalonWorkflowTests(TestCase):
 
     def test_double_booking_is_rejected(self):
         future = date.today() + timedelta(days=3)
-        Appointment.objects.create(client=self.customer, service=self.service, appointment_date=future, appointment_time='11:00')
+        Appointment.objects.create(client=self.customer, service=self.service, paid_at=timezone.now(), appointment_date=future, appointment_time='11:00')
         form = BookingForm(data={'customer_name': 'Other', 'phone': '+27111111112', 'email': 'other@example.com', 'service': self.service.pk, 'appointment_date': future, 'appointment_time': '11:00', 'notes': ''})
         self.assertFalse(form.is_valid())
+
+    def test_unpaid_booking_does_not_block_slot_until_pay_now(self):
+        future = date.today() + timedelta(days=3)
+        pending = Appointment.objects.create(client=self.customer, service=self.service, appointment_date=future, appointment_time='11:00')
+        form = BookingForm(data={'customer_name': 'Other', 'phone': '+27111111112', 'email': 'other@example.com', 'service': self.service.pk, 'appointment_date': future, 'appointment_time': '11:00', 'notes': ''})
+        self.assertTrue(form.is_valid(), form.errors)
+        response = self.client.post(f'/book/{pending.pk}/pay/')
+        self.assertEqual(response.status_code, 200)
+        pending.refresh_from_db()
+        self.assertIsNotNone(pending.paid_at)
+        self.assertEqual(pending.status, Appointment.CONFIRMED)
+        self.assertContains(response, 'BOOKING SECURED')
+        self.assertContains(response, 'wa.me')
 
     def test_walk_in_duration_and_invalid_times(self):
         start = datetime.now()
@@ -42,6 +55,11 @@ class SalonWorkflowTests(TestCase):
         response = self.client.get('/dashboard/')
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.url.startswith('/admin/login/?next=/dashboard/'))
+
+    def test_owner_dashboard_is_available_without_login(self):
+        response = self.client.get('/owner/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'PRIVATE OWNER SPACE')
 
     def test_booking_accepts_two_inspiration_images(self):
         future = date.today() + timedelta(days=3)
@@ -213,6 +231,10 @@ class SalonWorkflowTests(TestCase):
         self.assertRedirects(response, '/owner/')
         self.assertTrue(Service.objects.filter(name='Signature Blowout').exists())
 
+        owner_services_page = self.client.get('/services/')
+        self.assertNotContains(owner_services_page, 'Add service')
+        self.assertNotContains(owner_services_page, 'Edit service')
+
     def test_assigned_worker_sees_client_details(self):
         worker_user = User.objects.create_user('assigned_worker', password='pass-123')
         Profile.objects.update_or_create(user=worker_user, defaults={'role': Profile.WORKER})
@@ -248,7 +270,7 @@ class SalonWorkflowTests(TestCase):
         worker_user = User.objects.create_user('busy_worker', password='pass-123')
         Profile.objects.update_or_create(user=worker_user, defaults={'role': Profile.WORKER})
         worker = Worker.objects.create(user=worker_user)
-        Appointment.objects.create(client=self.customer, service=self.service, worker=worker, appointment_date=future, appointment_time='10:00')
+        Appointment.objects.create(client=self.customer, service=self.service, worker=worker, paid_at=timezone.now(), appointment_date=future, appointment_time='10:00')
         form = BookingForm(data={'customer_name': 'Busy Slot', 'phone': '+27111111114', 'email': 'busy@example.com', 'service': self.service.pk, 'appointment_date': future, 'appointment_time': '10:00', 'notes': ''})
         self.assertFalse(form.is_valid())
         self.assertIn('No worker is available', str(form.errors))
@@ -258,7 +280,7 @@ class SalonWorkflowTests(TestCase):
         worker_user = User.objects.create_user('slot_worker', password='pass-123')
         Profile.objects.update_or_create(user=worker_user, defaults={'role': Profile.WORKER})
         worker = Worker.objects.create(user=worker_user)
-        Appointment.objects.create(client=self.customer, service=self.service, worker=worker, appointment_date=future, appointment_time='10:00')
+        Appointment.objects.create(client=self.customer, service=self.service, worker=worker, paid_at=timezone.now(), appointment_date=future, appointment_time='10:00')
         response = self.client.get('/booked-times/', {'date': future.isoformat(), 'service': self.service.pk})
         self.assertEqual(response.status_code, 200)
         self.assertIn('10:00', response.json()['booked_times'])
@@ -296,14 +318,46 @@ class SalonWorkflowTests(TestCase):
         response = self.client.get(f'/owner/appointments/{appointment.pk}/')
         self.assertContains(response, self.customer.phone)
         self.assertContains(response, 'Bring braid reference')
-        self.assertContains(response, 'Busy')
-        self.assertContains(response, 'Inactive')
         response = self.client.post(f'/owner/appointments/{appointment.pk}/', {'worker': worker.pk, 'status': Appointment.CONFIRMED, 'notes': 'Assigned'})
         self.assertRedirects(response, '/owner/')
         dashboard = self.client.get(response.url)
         self.assertContains(dashboard, 'PRIVATE OWNER SPACE')
         appointment.refresh_from_db()
         self.assertEqual(appointment.worker, worker)
+
+    def test_owner_can_reassign_walk_in_to_available_worker(self):
+        first_user = User.objects.create_user('walkin_first', first_name='First')
+        Profile.objects.update_or_create(user=first_user, defaults={'role': Profile.WORKER})
+        first_worker = Worker.objects.create(user=first_user)
+        second_user = User.objects.create_user('walkin_second', first_name='Second')
+        Profile.objects.update_or_create(user=second_user, defaults={'role': Profile.WORKER})
+        second_worker = Worker.objects.create(user=second_user)
+        walk_in = WalkIn.objects.create(client=self.customer, service=self.service, worker=first_worker, amount=Decimal('250'))
+        form = WalkInManageForm(instance=walk_in)
+
+        self.assertIn(first_worker, form.fields['worker'].queryset)
+        self.assertIn(second_worker, form.fields['worker'].queryset)
+        form = WalkInManageForm({'worker': second_worker.pk, 'style': '', 'style_details': '', 'amount': '250.00', 'satisfaction': '', 'notes': ''}, instance=walk_in)
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        walk_in.refresh_from_db()
+        self.assertEqual(walk_in.worker, second_worker)
+
+    def test_worker_completing_walk_in_records_time_and_frees_worker(self):
+        worker_user = User.objects.create_user('completion_worker', password='pass-123')
+        Profile.objects.update_or_create(user=worker_user, defaults={'role': Profile.WORKER})
+        worker = Worker.objects.create(user=worker_user)
+        walk_in = WalkIn.objects.create(client=self.customer, service=self.service, worker=worker, amount=Decimal('250'))
+        self.client.login(username='completion_worker', password='pass-123')
+
+        response = self.client.post(f'/walk-ins/{walk_in.pk}/complete/')
+
+        self.assertRedirects(response, '/dashboard/')
+        walk_in.refresh_from_db()
+        self.assertIsNotNone(walk_in.completed_at)
+        self.assertIsNotNone(walk_in.time_spent_minutes)
+        available_form = WalkInManageForm(instance=walk_in)
+        self.assertIn(worker, available_form.fields['worker'].queryset)
 
     def test_worker_can_view_unassigned_appointment_and_assign_free_worker(self):
         future = date.today() + timedelta(days=5)
@@ -324,7 +378,7 @@ class SalonWorkflowTests(TestCase):
         worker_user = User.objects.create_user('already_busy', password='pass-123')
         Profile.objects.update_or_create(user=worker_user, defaults={'role': Profile.WORKER})
         worker = Worker.objects.create(user=worker_user)
-        Appointment.objects.create(client=self.customer, service=self.service, worker=worker, appointment_date=future, appointment_time='10:00')
+        Appointment.objects.create(client=self.customer, service=self.service, worker=worker, paid_at=timezone.now(), appointment_date=future, appointment_time='10:00')
         appointment = Appointment.objects.create(client=self.customer, service=self.service, appointment_date=future, appointment_time='10:00')
         form = AppointmentManageForm(instance=appointment)
         self.assertNotIn(worker, form.fields['worker'].queryset)

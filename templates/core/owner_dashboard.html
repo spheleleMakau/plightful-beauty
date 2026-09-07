@@ -47,6 +47,8 @@
       <article class="service-insight"><div class="insight-label">MOST REQUESTED</div><h2>Popular services</h2>{% for service in summary.popular_services %}<div class="service-row"><span>{{ service.service__name }}</span><b>{{ service.total }}</b></div>{% endfor %}</article>
     </div>
 
+    {% if late_appointments %}<section class="late-arrivals-panel" aria-label="Late arrivals"><div class="late-arrivals-intro"><span class="late-sparkle" aria-hidden="true">✦</span><div><p class="eyebrow">A LITTLE NUDGE</p><h2>Waiting for a hello</h2><p>These guests were due in already. Give them a quick call or check whether they are on their way.</p></div></div><div class="late-arrivals-list">{% for appointment in late_appointments %}<a href="{% url 'appointment_manage' appointment.pk %}" class="late-arrival-row"><span class="late-time">{{ appointment.appointment_time }}</span><span><strong>{{ appointment.client.full_name }}</strong><small>{{ appointment.service.name }}{% if appointment.worker %} · With {{ appointment.worker }}{% endif %}</small></span><b>Check in <span aria-hidden="true">→</span></b></a>{% endfor %}</div></section>{% endif %}
+
     <section class="schedule-panel">
       <div class="schedule-heading">
         <div><p class="eyebrow">TEAM AVAILABILITY</p><h2>Who is in, booked, or off?</h2><p>Live schedule from your salon bookings.</p></div>
@@ -56,7 +58,7 @@
           <button type="submit">View schedule</button>
         </form>
       </div>
-      <div class="schedule-legend"><span><i class="schedule-dot available"></i>Available</span><span><i class="schedule-dot booked"></i>Booked</span><span><i class="schedule-dot off"></i>Off</span></div>
+      <div class="schedule-pulse"><div class="pulse-stat pulse-available"><strong>{{ schedule_counts.available }}</strong><span>Available now</span></div><div class="pulse-stat pulse-booked"><strong>{{ schedule_counts.booked }}</strong><span>Booked</span></div><div class="pulse-stat pulse-off"><strong>{{ schedule_counts.off }}</strong><span>Off today</span></div><div class="schedule-legend"><span><i class="schedule-dot available"></i>Available</span><span><i class="schedule-dot booked"></i>Booked</span><span><i class="schedule-dot off"></i>Off</span></div></div>
       <div class="schedule-list">
         {% for item in worker_schedule %}
         <article class="schedule-row">
@@ -85,7 +87,7 @@
           <a href="{% url 'report_csv' %}?start={{ start|date:'Y-m-d' }}&end={{ end|date:'Y-m-d' }}"><span class="action-icon">RP</span><span><strong>Download report</strong><small>PDF for this period</small></span><b>&rarr;</b></a>
         </div>
         <div class="walkin-live"><div class="insight-label">WORKERS IN SALON TODAY</div>{% for worker in workers_in_salon %}<div class="walkin-row"><span><strong>{{ worker }}</strong><small>Assigned to current walk-in clients</small></span><b>On floor</b></div>{% endfor %}</div>
-        <div class="walkin-live"><div class="insight-label">CLIENTS INSIDE TODAY</div>{% for appointment in checked_in_appointments %}<div class="walkin-row"><span><strong>{{ appointment.client.full_name }}</strong><small>{{ appointment.service.name }} &middot; {% if appointment.worker %}Assigned to {{ appointment.worker }}{% else %}Worker not assigned{% endif %}</small></span><b>{{ appointment.get_status_display }}</b></div>{% endfor %}{% for walk_in in current_walk_ins %}<div class="walkin-row"><span><strong>{{ walk_in.client.full_name }}</strong><small>{{ walk_in.service.name }} &middot; {% if walk_in.worker %}Assigned to {{ walk_in.worker }}{% else %}Worker not assigned{% endif %}</small></span><b>{{ walk_in.time_spent_display }}</b></div>{% endfor %}</div>
+        <div class="walkin-live"><div class="insight-label">CLIENTS INSIDE TODAY</div>{% for appointment in checked_in_appointments %}<div class="walkin-row"><span><strong>{{ appointment.client.full_name }}</strong><small>{{ appointment.service.name }} &middot; {% if appointment.worker %}Assigned to {{ appointment.worker }}{% else %}Worker not assigned{% endif %}</small></span><b>{{ appointment.get_status_display }}</b></div>{% endfor %}{% for walk_in in current_walk_ins %}<a class="walkin-row walkin-link" href="{% url 'walk_in_manage' walk_in.pk %}"><span><strong>{{ walk_in.client.full_name }}</strong><small>{{ walk_in.service.name }} &middot; {% if walk_in.worker %}Assigned to {{ walk_in.worker }}{% else %}Worker not assigned{% endif %}</small></span><b>{{ walk_in.time_spent_display }} · Change &rarr;</b></a>{% endfor %}</div>
         <div class="owner-note"><span class="note-mark">PB</span><p>Beautiful work is in the details.</p><small>Plightful Beauty Salon</small></div>
       </aside>
     </div>

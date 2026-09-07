@@ -105,20 +105,33 @@ class Appointment(models.Model):
     inspiration_image_2 = models.ImageField(upload_to='inspiration/', blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=PENDING)
     created_at = models.DateTimeField(auto_now_add=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['appointment_date', 'appointment_time']
         constraints = [models.UniqueConstraint(fields=['appointment_date', 'appointment_time', 'worker'], name='unique_worker_slot')]
 
     def clean(self):
-        if self.appointment_date and self.appointment_time and datetime.combine(self.appointment_date, self.appointment_time) < datetime.now():
+        scheduled_time = timezone.make_aware(datetime.combine(self.appointment_date, self.appointment_time), timezone.get_current_timezone()) if self.appointment_date and self.appointment_time else None
+        if scheduled_time and scheduled_time < timezone.now():
             raise ValidationError('Please choose a future appointment time.')
-        clash = Appointment.objects.filter(appointment_date=self.appointment_date, appointment_time=self.appointment_time).exclude(pk=self.pk).exclude(status=self.CANCELLED)
+        clash = Appointment.objects.filter(appointment_date=self.appointment_date, appointment_time=self.appointment_time, paid_at__isnull=False).exclude(pk=self.pk).exclude(status=self.CANCELLED)
         if clash.exists() and self.worker_id is None:
             raise ValidationError('That appointment time is already reserved.')
 
     def __str__(self):
         return f'{self.client} - {self.service} on {self.appointment_date}'
+
+    @property
+    def attendance_duration_minutes(self):
+        if not self.completed_at:
+            return None
+        scheduled_start = timezone.make_aware(
+            datetime.combine(self.appointment_date, self.appointment_time),
+            timezone.get_current_timezone(),
+        )
+        return max(0, int((self.completed_at - scheduled_start).total_seconds() // 60))
 
 
 class WalkIn(models.Model):
@@ -129,6 +142,7 @@ class WalkIn(models.Model):
     style_details = models.TextField(blank=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     start_time = models.DateTimeField(default=timezone.now, editable=False)
+    completed_at = models.DateTimeField(null=True, blank=True)
     satisfaction = models.PositiveSmallIntegerField(null=True, blank=True)
     notes = models.TextField(blank=True)
 
@@ -142,7 +156,8 @@ class WalkIn(models.Model):
     def time_spent_minutes(self):
         if not self.start_time:
             return None
-        return max(0, int((timezone.now() - self.start_time).total_seconds() // 60))
+        end_time = self.completed_at or timezone.now()
+        return max(0, int((end_time - self.start_time).total_seconds() // 60))
 
     @property
     def time_spent_display(self):

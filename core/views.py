@@ -1,4 +1,9 @@
 from io import BytesIO
+import json
+import os
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote
+from urllib.request import Request, urlopen
 from datetime import date, timedelta
 from decimal import Decimal
 from django.conf import settings
@@ -19,25 +24,24 @@ from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from .analytics import business_summary
 from .availability import available_workers, recommended_slots
-from .forms import AppointmentManageForm, BookingForm, ClientManageForm, ServiceManageForm, WalkInForm, WorkerCreateForm
+from .forms import AppointmentManageForm, BookingForm, ClientManageForm, ServiceManageForm, WalkInForm, WalkInManageForm, WorkerCreateForm
 from .models import Appointment, Client, Profile, Service, WalkIn, Worker
 
 
 def owner_required(view_func):
-    @login_required
     def wrapped(request, *args, **kwargs):
+        # Owner access is intentionally open while the salon is being tested.
         profile = getattr(request.user, 'profile', None)
-        if not (profile and profile.role == Profile.OWNER):
+        if request.user.is_authenticated and not (profile and profile.role == Profile.OWNER):
             raise PermissionDenied
         return view_func(request, *args, **kwargs)
     return wrapped
 
 
 def owner_or_worker_required(view_func):
-    @login_required
     def wrapped(request, *args, **kwargs):
         profile = getattr(request.user, 'profile', None)
-        if request.user.is_staff or (profile and profile.role in (Profile.OWNER, Profile.WORKER)):
+        if not request.user.is_authenticated or request.user.is_staff or (profile and profile.role in (Profile.OWNER, Profile.WORKER)):
             return view_func(request, *args, **kwargs)
         raise PermissionDenied
     return wrapped
@@ -48,8 +52,32 @@ def notify_client(appointment, subject, message):
         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [appointment.client.email], fail_silently=True)
 
 
+def send_whatsapp_confirmation(phone, message):
+    access_token = os.getenv('WHATSAPP_ACCESS_TOKEN')
+    phone_number_id = os.getenv('WHATSAPP_PHONE_NUMBER_ID')
+    if not access_token or not phone_number_id:
+        return False, 'We could not send the WhatsApp message automatically.'
+    recipient = ''.join(character for character in phone if character.isdigit())
+    if not recipient:
+        return False, 'The supplied phone number is invalid.'
+    payload = json.dumps({'messaging_product': 'whatsapp', 'to': recipient, 'type': 'text', 'text': {'body': message}}).encode()
+    request = Request(
+        f'https://graph.facebook.com/v20.0/{phone_number_id}/messages',
+        data=payload,
+        headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
+        method='POST',
+    )
+    try:
+        with urlopen(request, timeout=10) as response:
+            return 200 <= response.status < 300, ''
+    except (HTTPError, URLError, TimeoutError):
+        return False, 'We could not deliver the WhatsApp message to this number.'
+
+
 def can_manage_appointment(request, appointment):
     profile = getattr(request.user, 'profile', None)
+    if not request.user.is_authenticated:
+        return True
     if request.user.is_staff or (profile and profile.role == Profile.OWNER):
         return True
     worker = get_object_or_404(Worker, user=request.user)
@@ -57,7 +85,7 @@ def can_manage_appointment(request, appointment):
 
 
 def selected_period(request):
-    today = date.today()
+    today = timezone.localdate()
     period = request.GET.get('period', 'today')
     if period == 'week':
         return today - timedelta(days=today.weekday()), today
@@ -104,6 +132,19 @@ def book(request):
         return render(request, 'core/booking_confirmation.html', {'appointment': appointment})
     return render(request, 'core/book.html', {'form': form})
 
+def booking_pay(request, pk):
+    appointment = get_object_or_404(Appointment.objects.select_related('client', 'service'), pk=pk)
+    if request.method != 'POST':
+        return redirect('home')
+    if appointment.paid_at is None:
+        appointment.paid_at = timezone.now()
+        appointment.status = Appointment.CONFIRMED
+        appointment.save(update_fields=['paid_at', 'status'])
+    message = f'Thank you {appointment.client.full_name}. Your Plightful Beauty booking for {appointment.service.name} on {appointment.appointment_date} at {appointment.appointment_time} is secured.'
+    whatsapp_url = f'https://wa.me/{"".join(character for character in appointment.client.phone if character.isdigit())}?text={quote(message)}'
+    whatsapp_sent, whatsapp_error = send_whatsapp_confirmation(appointment.client.phone, message)
+    return render(request, 'core/booking_confirmation.html', {'appointment': appointment, 'payment_message': message, 'whatsapp_url': whatsapp_url, 'whatsapp_sent': whatsapp_sent, 'whatsapp_error': whatsapp_error})
+
 def booked_times(request):
     selected_date = request.GET.get('date')
     service_id = request.GET.get('service')
@@ -116,7 +157,7 @@ def booked_times(request):
         duration = 60
     if not selected_date:
         return JsonResponse({'booked_times': [], 'available_slots': [], 'message': 'Choose a date and service first.'})
-    booked = Appointment.objects.filter(appointment_date=selected_date).exclude(status=Appointment.CANCELLED).order_by('appointment_time')
+    booked = Appointment.objects.filter(appointment_date=selected_date, paid_at__isnull=False).exclude(status=Appointment.CANCELLED).order_by('appointment_time')
     available = recommended_slots(selected_date, duration)
     return JsonResponse({
         'booked_times': [item.appointment_time.strftime('%H:%M') for item in booked],
@@ -132,12 +173,15 @@ def dashboard(request):
         return render(request, 'core/customer_dashboard.html', {'appointments': appointments})
     if profile and profile.role == 'worker':
         worker = get_object_or_404(Worker, user=request.user)
-        today = date.today()
-        appointments = Appointment.objects.filter(worker=worker, appointment_date=today).select_related('client', 'service')
-        assigned_appointments = Appointment.objects.filter(worker=worker, appointment_date__gte=today).exclude(status=Appointment.CANCELLED).select_related('client', 'service')
+        today = timezone.localdate()
+        active_statuses = [Appointment.PENDING, Appointment.CONFIRMED, Appointment.CHECKED_IN, Appointment.IN_PROGRESS]
+        appointments = Appointment.objects.filter(worker=worker, appointment_date=today, status__in=active_statuses).select_related('client', 'service')
+        walk_ins = WalkIn.objects.filter(worker=worker, start_time__date=today, completed_at__isnull=True).select_related('client', 'service')
+        assigned_appointments = Appointment.objects.filter(worker=worker, appointment_date__gte=today, status__in=active_statuses).select_related('client', 'service')
         completed = Appointment.objects.filter(worker=worker, status=Appointment.COMPLETED)
         context = {
             'appointments': appointments,
+            'walk_ins': walk_ins,
             'worker': worker,
             'assigned_clients': Client.objects.filter(appointments__worker=worker).distinct().order_by('full_name'),
             'completed_count': completed.count(),
@@ -160,11 +204,17 @@ def owner_dashboard(request):
     summary = business_summary(start, end)
     appointments = Appointment.objects.filter(appointment_date__range=(start, end)).exclude(status=Appointment.CANCELLED).select_related('client', 'service', 'worker')
     walk_ins = WalkIn.objects.filter(start_time__date__range=(start, end)).select_related('client', 'service', 'worker')
-    current_walk_ins = WalkIn.objects.filter(start_time__date=today).select_related('client', 'service', 'worker')
+    current_walk_ins = WalkIn.objects.filter(start_time__date=today, completed_at__isnull=True).select_related('client', 'service', 'worker')
     checked_in_appointments = Appointment.objects.filter(
         appointment_date=today,
         status__in=[Appointment.CHECKED_IN, Appointment.IN_PROGRESS],
     ).select_related('client', 'service', 'worker')
+    late_appointments = Appointment.objects.filter(
+        appointment_date=today,
+        appointment_time__lt=now.time(),
+        paid_at__isnull=False,
+        status__in=[Appointment.PENDING, Appointment.CONFIRMED],
+    ).select_related('client', 'service', 'worker').order_by('appointment_time')
     summary.update({
         'active_workers': Worker.objects.filter(is_active=True).count(),
         'loyal_clients': Client.objects.filter(
@@ -221,13 +271,18 @@ def owner_dashboard(request):
             'appointments': worker_appointments,
             'status': 'off' if not worker.is_active else ('booked' if worker_appointments else 'available'),
         })
-    return render(request, 'core/owner_dashboard.html', {'summary': summary, 'appointments': appointments, 'calendar_appointments': upcoming_appointments, 'upcoming_appointments': upcoming_appointments, 'walk_ins': walk_ins, 'current_walk_ins': current_walk_ins, 'checked_in_appointments': checked_in_appointments, 'next_appointment': next_appointment, 'worker_performance': worker_performance, 'workers_in_salon': workers_in_salon, 'worker_schedule': worker_schedule, 'schedule_date': schedule_date, 'start': start, 'end': end})
+    schedule_counts = {
+        'available': sum(item['status'] == 'available' for item in worker_schedule),
+        'booked': sum(item['status'] == 'booked' for item in worker_schedule),
+        'off': sum(item['status'] == 'off' for item in worker_schedule),
+    }
+    return render(request, 'core/owner_dashboard.html', {'summary': summary, 'appointments': appointments, 'calendar_appointments': upcoming_appointments, 'upcoming_appointments': upcoming_appointments, 'walk_ins': walk_ins, 'current_walk_ins': current_walk_ins, 'checked_in_appointments': checked_in_appointments, 'late_appointments': late_appointments, 'next_appointment': next_appointment, 'worker_performance': worker_performance, 'workers_in_salon': workers_in_salon, 'worker_schedule': worker_schedule, 'schedule_counts': schedule_counts, 'schedule_date': schedule_date, 'start': start, 'end': end})
 
 
 def owner_preview(request):
     if not settings.DEBUG:
         raise PermissionDenied
-    today = date.today()
+    today = timezone.localdate()
     summary = {'appointments': 0, 'completed_appointments': 0, 'revenue': 0, 'walk_ins': 0, 'pending': 0, 'cancelled': 0, 'active_workers': 0, 'loyal_clients': 0}
     return render(request, 'core/owner_preview.html', {'summary': summary, 'start': today, 'end': today, 'preview_mode': True})
 
@@ -257,6 +312,12 @@ def appointment_manage(request, pk):
     form = AppointmentManageForm(request.POST or None, instance=appointment, is_owner=is_owner)
     if request.method == 'POST' and form.is_valid():
         updated = form.save()
+        if updated.status == Appointment.COMPLETED and updated.completed_at is None:
+            updated.completed_at = timezone.now()
+            updated.save(update_fields=['completed_at'])
+        elif updated.status != Appointment.COMPLETED and updated.completed_at is not None:
+            updated.completed_at = None
+            updated.save(update_fields=['completed_at'])
         notify_client(updated, 'Your Plightful Beauty appointment was updated', f'Your appointment for {updated.service.name} on {updated.appointment_date} at {updated.appointment_time} is now {updated.get_status_display()}. Assigned worker: {updated.worker or "To be confirmed"}.')
         messages.success(request, 'Appointment updated and the client was notified when an email was available.')
         return redirect('owner_dashboard' if is_owner else 'owner_appointments')
@@ -364,6 +425,30 @@ def walk_in_create(request):
     if request.method == 'POST' and form.is_valid():
         form.save(); messages.success(request, 'Walk-in saved successfully.'); return redirect('owner_dashboard')
     return render(request, 'core/form.html', {'form': form, 'title': 'Record a walk-in'})
+
+@owner_required
+def walk_in_manage(request, pk):
+    walk_in = get_object_or_404(WalkIn.objects.select_related('client', 'service', 'worker'), pk=pk)
+    form = WalkInManageForm(request.POST or None, instance=walk_in)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Walk-in assignment updated.')
+        return redirect('owner_dashboard')
+    return render(request, 'core/form.html', {'form': form, 'title': 'Update walk-in assignment', 'is_owner': True})
+
+@owner_or_worker_required
+def walk_in_complete(request, pk):
+    walk_in = get_object_or_404(WalkIn, pk=pk)
+    profile = getattr(request.user, 'profile', None)
+    if profile and profile.role == Profile.WORKER:
+        worker = get_object_or_404(Worker, user=request.user)
+        if walk_in.worker_id != worker.pk:
+            raise PermissionDenied
+    if request.method == 'POST' and walk_in.completed_at is None:
+        walk_in.completed_at = timezone.now()
+        walk_in.save(update_fields=['completed_at'])
+        messages.success(request, 'Client marked complete and the worker is available again.')
+    return redirect('dashboard' if profile and profile.role == Profile.WORKER else 'owner_dashboard')
 
 @owner_required
 def report_csv(request):
