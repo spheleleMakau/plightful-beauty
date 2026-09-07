@@ -75,6 +75,10 @@ def selected_period(request):
 def home(request):
     return render(request, 'core/home.html')
 
+
+def owner_login_redirect(request):
+    return redirect('owner_dashboard')
+
 def about(request): return render(request, 'core/about.html')
 def services(request): return render(request, 'core/services.html', {'services': Service.objects.filter(is_active=True)})
 def gallery(request): return render(request, 'core/gallery.html')

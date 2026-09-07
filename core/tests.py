@@ -69,7 +69,8 @@ class SalonWorkflowTests(TestCase):
         worker = User.objects.create_user('worker_login', password='pass-123')
         Profile.objects.update_or_create(user=worker, defaults={'role': Profile.WORKER})
         Worker.objects.create(user=worker)
-        self.assertEqual(self.client.get('/owner/login/').status_code, 404)
+        self.assertEqual(self.client.get('/owner/login/').status_code, 302)
+        self.assertIn('/owner/', self.client.get('/owner/login/').url)
         self.assertEqual(self.client.get('/worker/login/').status_code, 404)
         self.assertEqual(self.client.get('/accounts/login/').status_code, 404)
 
