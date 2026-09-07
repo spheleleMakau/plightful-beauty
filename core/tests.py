@@ -63,6 +63,56 @@ class SalonWorkflowTests(TestCase):
         self.assertEqual(summary['revenue'], Decimal('350'))
         self.assertEqual(summary['clients_served'], 1)
 
+    def test_business_summary_separates_cancelled_and_pending_appointments(self):
+        future = date.today() + timedelta(days=3)
+        Appointment.objects.create(client=self.customer, service=self.service, status=Appointment.CANCELLED, appointment_date=future, appointment_time='09:00')
+        Appointment.objects.create(client=self.customer, service=self.service, status=Appointment.PENDING, appointment_date=future, appointment_time='10:00')
+
+        summary = business_summary(future, future)
+
+        self.assertEqual(summary['appointments'], 1)
+        self.assertEqual(summary['pending'], 1)
+        self.assertEqual(summary['cancelled'], 1)
+
+    def test_owner_dashboard_excludes_past_appointments_from_next(self):
+        past_client = Client.objects.create(full_name='Past Client', phone='+27111111115')
+        future_client = Client.objects.create(full_name='Future Client', phone='+27111111116')
+        past_time = (timezone.localtime() - timedelta(hours=1)).time().replace(second=0, microsecond=0)
+        Appointment.objects.create(client=past_client, service=self.service, status=Appointment.PENDING, appointment_date=date.today(), appointment_time=past_time)
+        Appointment.objects.create(client=future_client, service=self.service, status=Appointment.PENDING, appointment_date=date.today() + timedelta(days=1), appointment_time='10:00')
+        owner = User.objects.create_user('next_owner', password='pass-123')
+        Profile.objects.update_or_create(user=owner, defaults={'role': Profile.OWNER})
+        self.client.login(username='next_owner', password='pass-123')
+
+        response = self.client.get('/owner/')
+
+        self.assertEqual(response.context['next_appointment'].client, future_client)
+
+    def test_owner_dashboard_shows_worker_schedule_states(self):
+        schedule_date = date.today() + timedelta(days=2)
+        booked_user = User.objects.create_user('scheduled_worker', first_name='Booked', last_name='Worker')
+        Profile.objects.update_or_create(user=booked_user, defaults={'role': Profile.WORKER})
+        booked_worker = Worker.objects.create(user=booked_user, position='Senior Stylist')
+        available_user = User.objects.create_user('available_schedule_worker', first_name='Available', last_name='Worker')
+        Profile.objects.update_or_create(user=available_user, defaults={'role': Profile.WORKER})
+        Worker.objects.create(user=available_user, position='Nail Artist')
+        off_user = User.objects.create_user('off_schedule_worker', first_name='Off', last_name='Worker')
+        Profile.objects.update_or_create(user=off_user, defaults={'role': Profile.WORKER})
+        Worker.objects.create(user=off_user, is_active=False)
+        Appointment.objects.create(client=self.customer, service=self.service, worker=booked_worker, appointment_date=schedule_date, appointment_time='10:00')
+        owner = User.objects.create_user('schedule_owner', password='pass-123')
+        Profile.objects.update_or_create(user=owner, defaults={'role': Profile.OWNER})
+        self.client.login(username='schedule_owner', password='pass-123')
+
+        response = self.client.get('/owner/', {'schedule_date': schedule_date.isoformat()})
+
+        self.assertContains(response, 'Booked Worker')
+        self.assertContains(response, 'Available Worker')
+        self.assertContains(response, 'Off Worker')
+        self.assertContains(response, 'Booked')
+        self.assertContains(response, 'Available')
+        self.assertContains(response, 'Not active today')
+
     def test_sign_in_routes_are_removed(self):
         owner = User.objects.create_user('owner_login', password='pass-123', is_staff=True)
         Profile.objects.update_or_create(user=owner, defaults={'role': Profile.OWNER})

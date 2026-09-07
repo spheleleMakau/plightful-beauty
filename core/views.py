@@ -6,10 +6,11 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.mail import send_mail
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, F, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponse
 from django.http import JsonResponse
+from django.utils import timezone
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.pagesizes import A4
@@ -154,24 +155,32 @@ def dashboard(request):
 @owner_required
 def owner_dashboard(request):
     start, end = selected_period(request)
+    now = timezone.localtime()
+    today = now.date()
     summary = business_summary(start, end)
-    appointments = Appointment.objects.filter(appointment_date__range=(start, end)).select_related('client', 'service', 'worker')
+    appointments = Appointment.objects.filter(appointment_date__range=(start, end)).exclude(status=Appointment.CANCELLED).select_related('client', 'service', 'worker')
     walk_ins = WalkIn.objects.filter(start_time__date__range=(start, end)).select_related('client', 'service', 'worker')
-    current_walk_ins = WalkIn.objects.filter(start_time__date=date.today()).select_related('client', 'service', 'worker')
+    current_walk_ins = WalkIn.objects.filter(start_time__date=today).select_related('client', 'service', 'worker')
     checked_in_appointments = Appointment.objects.filter(
-        appointment_date=date.today(),
+        appointment_date=today,
         status__in=[Appointment.CHECKED_IN, Appointment.IN_PROGRESS],
     ).select_related('client', 'service', 'worker')
     summary.update({
-        'pending': appointments.filter(status=Appointment.PENDING).count(),
-        'cancelled': appointments.filter(status=Appointment.CANCELLED).count(),
         'active_workers': Worker.objects.filter(is_active=True).count(),
-        'loyal_clients': Client.objects.annotate(visit_count=Count('visits')).filter(visit_count__gte=3).count(),
+        'loyal_clients': Client.objects.filter(
+            Q(appointments__status=Appointment.COMPLETED, appointments__appointment_date__range=(start, end)) |
+            Q(walk_ins__start_time__date__range=(start, end))
+        ).annotate(
+            completed_count=Count('appointments', filter=Q(appointments__status=Appointment.COMPLETED, appointments__appointment_date__range=(start, end)), distinct=True),
+            walk_in_count=Count('walk_ins', filter=Q(walk_ins__start_time__date__range=(start, end)), distinct=True),
+        ).annotate(total_visits=F('completed_count') + F('walk_in_count')).filter(total_visits__gte=3).count(),
     })
     summary['average_ticket'] = (summary['revenue'] / summary['clients_served']).quantize(Decimal('0.01')) if summary['clients_served'] else Decimal('0.00')
     summary['satisfaction'] = round(summary['average_satisfaction'], 1) if summary['average_satisfaction'] is not None else '—'
-    next_appointment = Appointment.objects.filter(appointment_date__gte=date.today()).exclude(status=Appointment.CANCELLED).select_related('client', 'service', 'worker').first()
-    upcoming_appointments = Appointment.objects.filter(appointment_date__gte=date.today()).exclude(status=Appointment.CANCELLED).select_related('client', 'service', 'worker').order_by('appointment_date', 'appointment_time')
+    future_statuses = [Appointment.PENDING, Appointment.CONFIRMED, Appointment.CHECKED_IN, Appointment.IN_PROGRESS]
+    upcoming_filter = Q(appointment_date__gt=today) | Q(appointment_date=today, appointment_time__gte=now.time())
+    next_appointment = Appointment.objects.filter(upcoming_filter, status__in=future_statuses).select_related('client', 'service', 'worker').order_by('appointment_date', 'appointment_time').first()
+    upcoming_appointments = Appointment.objects.filter(upcoming_filter, status__in=future_statuses).select_related('client', 'service', 'worker').order_by('appointment_date', 'appointment_time')
     worker_performance = list(Worker.objects.filter(is_active=True).select_related('user').annotate(
         assigned_services=Count('appointments', filter=Q(appointments__appointment_date__range=(start, end)) & ~Q(appointments__status=Appointment.CANCELLED)),
         completed_services=Count('appointments', filter=Q(appointments__status=Appointment.COMPLETED, appointments__appointment_date__range=(start, end))),
@@ -190,9 +199,29 @@ def owner_dashboard(request):
         worker.total_revenue = (worker.generated_revenue or Decimal('0.00')) + worker.walk_in_revenue
     worker_performance.sort(key=lambda worker: (-worker.total_assigned, worker.user.last_name))
     workers_in_salon = Worker.objects.filter(
-        Q(is_active=True) & (Q(walk_ins__start_time__date=date.today()) | Q(appointments__appointment_date=date.today(), appointments__status__in=[Appointment.CHECKED_IN, Appointment.IN_PROGRESS]))
+        Q(is_active=True) & (Q(walk_ins__start_time__date=today) | Q(appointments__appointment_date=today, appointments__status__in=[Appointment.CHECKED_IN, Appointment.IN_PROGRESS]))
     ).distinct().select_related('user')
-    return render(request, 'core/owner_dashboard.html', {'summary': summary, 'appointments': appointments, 'calendar_appointments': upcoming_appointments, 'upcoming_appointments': upcoming_appointments, 'walk_ins': walk_ins, 'current_walk_ins': current_walk_ins, 'checked_in_appointments': checked_in_appointments, 'next_appointment': next_appointment, 'worker_performance': worker_performance, 'workers_in_salon': workers_in_salon, 'start': start, 'end': end})
+    schedule_date = request.GET.get('schedule_date', today.isoformat())
+    try:
+        schedule_date = date.fromisoformat(schedule_date)
+    except ValueError:
+        schedule_date = today
+    schedule_appointments = Appointment.objects.filter(
+        appointment_date=schedule_date,
+        worker__isnull=False,
+    ).exclude(status=Appointment.CANCELLED).select_related('client', 'service', 'worker').order_by('appointment_time')
+    appointments_by_worker = {}
+    for appointment in schedule_appointments:
+        appointments_by_worker.setdefault(appointment.worker_id, []).append(appointment)
+    worker_schedule = []
+    for worker in Worker.objects.select_related('user').order_by('-is_active', 'user__first_name', 'user__last_name'):
+        worker_appointments = appointments_by_worker.get(worker.pk, [])
+        worker_schedule.append({
+            'worker': worker,
+            'appointments': worker_appointments,
+            'status': 'off' if not worker.is_active else ('booked' if worker_appointments else 'available'),
+        })
+    return render(request, 'core/owner_dashboard.html', {'summary': summary, 'appointments': appointments, 'calendar_appointments': upcoming_appointments, 'upcoming_appointments': upcoming_appointments, 'walk_ins': walk_ins, 'current_walk_ins': current_walk_ins, 'checked_in_appointments': checked_in_appointments, 'next_appointment': next_appointment, 'worker_performance': worker_performance, 'workers_in_salon': workers_in_salon, 'worker_schedule': worker_schedule, 'schedule_date': schedule_date, 'start': start, 'end': end})
 
 
 def owner_preview(request):
@@ -248,7 +277,11 @@ def appointment_delete(request, pk):
 
 @owner_required
 def client_list(request):
-    clients = Client.objects.annotate(visit_total=Count('visits')).order_by('full_name')
+    clients = Client.objects.annotate(
+        appointment_total=Count('appointments', filter=~Q(appointments__status=Appointment.CANCELLED), distinct=True),
+        walk_in_total=Count('walk_ins', distinct=True),
+        visit_total=Count('visits', distinct=True),
+    ).order_by('full_name')
     query = request.GET.get('q')
     if query:
         clients = clients.filter(Q(full_name__icontains=query) | Q(phone__icontains=query) | Q(email__icontains=query))
