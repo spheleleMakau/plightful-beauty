@@ -16,6 +16,18 @@ python manage.py runserver
 
 Open `http://127.0.0.1:8000/` after starting the development server.
 
+## Deploy to Render
+
+This repository includes `render.yaml` for a Render web service and PostgreSQL database. In Render, choose **New > Blueprint**, connect this repository, and apply the blueprint. Render will install dependencies, collect static files, run migrations, and start Gunicorn automatically.
+
+After the first deploy, create an owner account from the Render shell:
+
+```bash
+python manage.py createsuperuser
+```
+
+The blueprint sets `DEBUG=False`, generates a `SECRET_KEY`, and connects the app to the managed PostgreSQL database. Uploaded media files remain local to the web service filesystem; use object storage for persistent production uploads if clients will upload inspiration images.
+
 The project uses SQLite by default. Settings are loaded from environment variables with `python-dotenv`:
 
 | Variable | Default | Purpose |
