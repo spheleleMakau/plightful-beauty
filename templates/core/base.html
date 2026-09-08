@@ -18,6 +18,7 @@
         <a href="{% url 'home' %}" class="brand" aria-label="Plightful Beauty home">
           <img src="{% static 'img/logo.jpg' %}" alt="Plightful Beauty logo">
         </a>
+        {% if request.resolver_match.url_name == 'owner_dashboard' or 'owner_' in request.resolver_match.url_name %}<a class="owner-top-link" href="{% url 'home' %}">View website <span aria-hidden="true">↗</span></a>{% endif %}
         <button class="nav-toggle" type="button" aria-label="Open navigation" aria-controls="site-navigation" aria-expanded="false"><span></span><span></span><span></span></button>
         <nav class="nav" id="site-navigation" aria-label="Main navigation">
           <div class="nav-main">
@@ -29,9 +30,10 @@
           </div>
           {% if request.resolver_match.url_name == 'owner_dashboard' or 'owner_' in request.resolver_match.url_name %}
           <div class="nav-account">
+          <a class="owner-mobile-site-link" href="{% url 'home' %}">View website <span aria-hidden="true">↗</span></a>
           {% if user.is_authenticated %}
             {% if user.profile.role == 'owner' %}
-              {% if request.resolver_match.url_name == 'owner_dashboard' or 'owner_' in request.resolver_match.url_name %}<a class="nav-portal" href="{% url 'home' %}">View website</a><a class="nav-portal" href="{% url 'owner_dashboard' %}">Owner Dashboard</a>{% endif %}
+              {% if request.resolver_match.url_name == 'owner_dashboard' or 'owner_' in request.resolver_match.url_name %}<a class="nav-portal" href="{% url 'owner_dashboard' %}">Owner Dashboard</a>{% endif %}
             {% elif user.profile.role == 'worker' %}<a class="nav-portal" href="{% url 'dashboard' %}">Worker Dashboard</a>{% else %}<a class="nav-portal" href="{% url 'dashboard' %}">My Dashboard</a>{% endif %}
             <form class="logout-form" method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">Sign out</button></form>
           {% endif %}

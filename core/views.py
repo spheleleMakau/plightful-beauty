@@ -289,7 +289,7 @@ def owner_preview(request):
 
 @owner_or_worker_required
 def appointment_list(request):
-    appointments = Appointment.objects.select_related('client', 'service', 'worker').all()
+    appointments = Appointment.objects.filter(appointment_date__gte=timezone.localdate()).select_related('client', 'service', 'worker')
     profile = getattr(request.user, 'profile', None)
     if not request.user.is_staff and profile and profile.role == Profile.WORKER:
         worker = get_object_or_404(Worker, user=request.user)
@@ -454,6 +454,9 @@ def walk_in_complete(request, pk):
 def report_csv(request):
     start, end = selected_period(request)
     summary = business_summary(start, end)
+    report_appointments = Appointment.objects.filter(
+        appointment_date__range=(start, end),
+    ).select_related('client', 'service').order_by('appointment_date', 'appointment_time', 'pk')
     buffer = BytesIO()
     document = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=18 * mm, leftMargin=18 * mm, topMargin=18 * mm, bottomMargin=18 * mm)
     palette = {
@@ -499,6 +502,21 @@ def report_csv(request):
         ('GRID', (0, 0), (-1, -1), 0.4, palette['line']), ('BOTTOMPADDING', (0, 0), (-1, -1), 8), ('TOPPADDING', (0, 0), (-1, -1), 8),
     ]))
     story.append(services_table)
+    story.append(Paragraph('Appointment register', section_style))
+    appointments_table = [['ID', 'Date', 'Time', 'Client', 'Service', 'Status']]
+    appointments_table.extend([
+        [str(appointment.pk), appointment.appointment_date.strftime('%d %b %Y'), appointment.appointment_time.strftime('%H:%M'), appointment.client.full_name, appointment.service.name, appointment.get_status_display()]
+        for appointment in report_appointments
+    ] or [['-', '-', '-', 'No appointments in this period', '-', '-']])
+    appointments_table = Table(appointments_table, colWidths=[12 * mm, 25 * mm, 18 * mm, 42 * mm, 38 * mm, 25 * mm], repeatRows=1)
+    appointments_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), palette['ink']), ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'), ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 7), ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, palette['blush']]),
+        ('GRID', (0, 0), (-1, -1), 0.4, palette['line']), ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6), ('TOPPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    story.append(appointments_table)
     document.build(story)
     response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="plightful-report-{start}.pdf"'

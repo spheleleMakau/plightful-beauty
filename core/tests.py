@@ -373,6 +373,22 @@ class SalonWorkflowTests(TestCase):
         appointment.refresh_from_db()
         self.assertEqual(appointment.worker, worker)
 
+    def test_appointments_queue_hides_past_records_but_report_period_keeps_them(self):
+        yesterday = timezone.localdate() - timedelta(days=1)
+        old_appointment = Appointment.objects.create(client=self.customer, service=self.service, appointment_date=yesterday, appointment_time='10:00', status=Appointment.COMPLETED)
+        today_appointment = Appointment.objects.create(client=self.customer, service=self.service, appointment_date=timezone.localdate(), appointment_time='11:00')
+        owner = User.objects.create_user('history_owner', password='pass-123')
+        Profile.objects.update_or_create(user=owner, defaults={'role': Profile.OWNER})
+        self.client.login(username='history_owner', password='pass-123')
+
+        queue_response = self.client.get('/owner/appointments/')
+        self.assertNotContains(queue_response, f'/owner/appointments/{old_appointment.pk}/')
+        self.assertContains(queue_response, f'/owner/appointments/{today_appointment.pk}/')
+
+        report_response = self.client.get('/reports.csv', {'start': yesterday.isoformat(), 'end': timezone.localdate().isoformat()})
+        self.assertEqual(report_response.status_code, 200)
+        self.assertTrue(report_response.content.startswith(b'%PDF'))
+
     def test_busy_worker_is_not_available_for_assignment(self):
         future = date.today() + timedelta(days=6)
         worker_user = User.objects.create_user('already_busy', password='pass-123')

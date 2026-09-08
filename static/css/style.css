@@ -190,6 +190,7 @@ h1,h2,h3,h4{font-family:var(--display)}
 .skip-link:focus{top:0}
 .site-header{position:relative;z-index:10;padding:14px 0;background:var(--ink);border-bottom:1px solid rgba(255,255,255,.13)}
 .site-header .container{min-height:68px}
+.owner-top-link{display:none;color:var(--gold-light);font:700 11px var(--sans);letter-spacing:.1em;text-decoration:none;text-transform:uppercase;white-space:nowrap}.owner-top-link span{color:var(--pink);font-size:14px;margin-left:5px}.owner-top-link:hover{color:#fff}
 .brand{width:68px;height:68px;box-shadow:0 0 0 2px var(--gold-light);transition:transform .25s ease}
 .brand:hover{transform:rotate(-4deg)}
 .nav{gap:28px}
@@ -240,6 +241,7 @@ h1,h2,h3,h4{font-family:var(--display)}
 .page-section h1{font-size:clamp(52px,7vw,84px);line-height:.98;letter-spacing:-.02em}
 .page-section p{font-size:16px;line-height:1.8}
 .story-layout{display:grid;grid-template-columns:1fr 1fr;gap:100px;align-items:start}
+.founder-portrait{width:min(100%,360px);margin:54px 0 0 28px}.founder-portrait img{display:block;width:100%;aspect-ratio:3/4;object-fit:cover;object-position:center;box-shadow:18px 18px 0 rgba(179,138,85,.18)}.founder-portrait figcaption{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-top:18px}.founder-portrait strong{font:400 23px var(--display)}.founder-portrait span{color:var(--muted);font:11px var(--sans);letter-spacing:.08em;text-transform:uppercase;text-align:right}
 .story-copy{padding-top:70px;max-width:500px}
 .story-copy .lead,.contact-grid .lead{margin-top:0;color:var(--ink-soft);font:400 24px/1.45 var(--display)}
 .story-copy p:not(.lead){color:var(--muted);font-size:15px}
@@ -270,7 +272,7 @@ h1,h2,h3,h4{font-family:var(--display)}
   .story-layout,.contact-grid{grid-template-columns:1fr;gap:26px}
   .appointment-layout{grid-template-columns:1fr;gap:42px}.client-detail-list div{grid-template-columns:1fr;gap:6px}.assignment-shell{padding:26px 20px}
   .gallery-grid{grid-template-columns:1fr;gap:34px}.gallery-grid .gallery-image{height:auto;max-height:none;object-fit:contain}.payment-card{grid-template-columns:1fr;padding:20px}.payment-card img{height:auto;max-height:none;object-fit:contain}
-  .story-copy{padding-top:0}
+  .story-copy{padding-top:0}.founder-portrait{width:min(100%,360px);margin:24px 0 0}.founder-portrait figcaption{align-items:flex-start;flex-direction:column;gap:6px}.founder-portrait span{text-align:left}
   .contact-grid{margin-top:42px}
 }
 
@@ -305,6 +307,9 @@ h1,h2,h3,h4{font-family:var(--display)}
   *,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
 }
 
+.owner-area .owner-top-link{display:block;order:2;margin-left:18px}
+.owner-mobile-site-link{display:none;color:var(--gold-light);font:700 11px var(--sans);letter-spacing:.1em;text-decoration:none;text-transform:uppercase}.owner-mobile-site-link span{color:var(--pink);font-size:14px;margin-left:5px}.owner-mobile-site-link:hover{color:#fff}
+
 .schedule-pulse{display:flex;align-items:stretch;gap:10px;padding:16px 0;border-bottom:1px solid #eee7e4}.pulse-stat{display:flex;align-items:baseline;gap:8px;padding:10px 13px;background:#faf8f7;border:1px solid #eee7e4}.pulse-stat strong{font:400 22px var(--display)}.pulse-stat span{color:var(--muted);font:10px var(--sans);letter-spacing:.07em;text-transform:uppercase}.pulse-available strong{color:#4c8063}.pulse-booked strong{color:var(--pink)}.pulse-off strong{color:#9a908c}.schedule-pulse .schedule-legend{margin-left:auto;padding:0}
 @media (max-width:760px){.schedule-pulse{flex-wrap:wrap}.schedule-pulse .schedule-legend{width:100%;margin-left:0;padding-top:8px}}
 
@@ -330,10 +335,13 @@ h1,h2,h3,h4{font-family:var(--display)}
 .brand{flex:0 0 68px;width:68px;height:68px}
 .nav{margin-left:auto}
 .nav-toggle{flex:0 0 36px}
+.owner-area .nav{order:1}.owner-area .nav-toggle{order:0}
 
 @media (max-width:760px){
   .site-header{min-height:78px}
   .site-header .container{min-height:62px}
   .brand{flex-basis:62px;width:62px;height:62px}
   .nav-toggle{margin-left:auto}
+  .owner-area .owner-top-link{display:none}
+  .owner-area .owner-mobile-site-link{display:block}
 }
